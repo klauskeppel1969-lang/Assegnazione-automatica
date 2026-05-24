@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assegnazione Camere · Hotel Apogeo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: #0a0f1a;
+    color: #e2e8f0;
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0a0f1a; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+  input, textarea, select {
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input:focus, textarea:focus {
+    border-color: #c0392b !important;
+    box-shadow: 0 0 0 2px rgba(192,57,43,0.15);
+  }
+  button { font-family: inherit; cursor: pointer; transition: all 0.15s; }
+  button:active { transform: scale(0.98); }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+
+  table { border-collapse: collapse; width: 100%; }
+  th { user-select: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 14px;
+  }
+
+  .card {
+    background: #131c2e;
+    border: 1px solid #1e3a5f;
+    border-radius: 8px;
+    padding: 22px;
+    margin-bottom: 16px;
+  }
+
+  .api-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: radial-gradient(ellipse at 50% 0%, #1a2744 0%, #0a0f1a 60%);
+  }
+
+  .badge {
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    color: #fff;
+  }
+
+  .piano-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr !important; }
+    .header-inner { flex-direction: column; gap: 10px; }
+    th:nth-child(6), td:nth-child(6) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// ─── SYSTEM PROMPT ────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `Sei il sistema esperto di assegnazione camere per Hotel Apogeo (MAYA srl), Bettolle (Sinalunga, Siena).
+
+Il tuo compito è assegnare gli ospiti alle camere rispettando rigorosamente:
+1) vincoli strutturali dell'hotel
+2) gerarchia delle priorità decisionali
+3) tipologia di camera richiesta
+4) vicinanza tra ospiti e sottogruppi
+5) richieste specifiche degli ospiti
+6) regole operative speciali
+
+════════════════════════════════
+FASE 0 — CONTROLLO PRELIMINARE OBBLIGATORIO
+════════════════════════════════
+
+Prima di qualsiasi assegnazione, eseguire SEMPRE questi controlli.
+Se uno fallisce, FERMARSI e segnalare il problema.
+
+─── A) VERIFICA NUMERI ──────────
+Calcolare:
+  - Numero di camere richieste dalla rooming list
+  - Numero totale di ospiti
+  - Numero di camere disponibili (dopo esclusioni)
+
+⛔ Se camere richieste > camere disponibili → STOP. Segnalare il deficit.
+⛔ Se i numeri non tornano → STOP. Spiegare l'incongruenza.
+
+─── B) VERIFICA ROOMING LIST ────
+✅ Ogni ospite ha: cognome, nome, data di nascita (o almeno età), tipologia camera
+⛔ Se manca la data di nascita → procedere con stima se possibile, segnalarlo
+⛔ Se la tipologia è ambigua → mostrare l'interpretazione proposta
+
+─── C) VOCABOLARIO TIPOLOGIE ────
+  "singola" / "S" / "1"         → S — 1 ospite
+  "matrimoniale" / "M" / "2"    → M — 2 ospiti, letto matrimoniale
+  "DUS" / "doppia uso singola"   → M usata come singola
+  "twin" / "doppia letti sep."   → D — 2 ospiti, letti separati
+  "tripla" / "T" / "3"          → T — 3 ospiti
+  "appartamento" / "app"         → App/Quin a seconda della capienza
+  "suite"                        → App o Quin
+
+─── D) CALCOLO ETÀ ──────────────
+Per ogni ospite calcolare l'età alla data odierna (o alla data di arrivo se fornita).
+Calcolare l'età media per ogni camera.
+Ordinare tutte le camere per età media decrescente.
+
+════════════════════════════════
+GERARCHIA VINCOLANTE
+════════════════════════════════
+
+1. Richieste specifiche e comfort (VIP, mobilità ridotta, silenzio, vicinanza)
+2. Vicinanza tra ospiti e sottogruppi
+3. Distanza dalla camera alla hall/ascensore (meno passi = meglio per anziani)
+4. Qualità camera
+
+════════════════════════════════
+SCALA QUALITÀ CAMERE
+════════════════════════════════
+
+Molto belle (ordine rigido): 34 > 33 > 32 > 31 > 30 > 29 > 20
+Abbastanza belle: 15, 21, 22, 25, 28
+Mediamente belle: 130, 14, 16
+Discretamente belle: 45, 46, 47, 48
+Scarse: 23, 24, 26, 18, 35
+Normali: tutte le altre
+
+REGOLA QUALITÀ:
+- Le camere "molto belle" (34→20) sono assegnate in via PRIORITARIA a capo gruppo, VIP, guide.
+- La camera 34 è riservata al capo gruppo / guida.
+- NON assegnare 34 se è previsto un evento serale in discoteca.
+
+════════════════════════════════
+REGOLA ANTI-OVERSIZING — OBBLIGATORIA
+════════════════════════════════
+
+  S       = 1 ospite esatto
+  D / M   = 2 ospiti esatti
+  M+1 / T = 3 ospiti
+  Quad / Quin = solo se esplicitamente richiesto o indispensabile
+
+❌ VIETATO assegnare una singola a 2 ospiti.
+❌ VIETATO assegnare M+1 o T a una coppia quando esistono M o D disponibili.
+❌ VIETATO usare suite/appartamenti per gruppi piccoli quando esistono alternative.
+❌ VIETATO fare soluzioni creative non previste dall'inventario.
+
+════════════════════════════════
+REGOLE OPERATIVE SPECIALI
+════════════════════════════════
+
+─── CAMERA 35 ───────────────────
+Riservata al proprietario. NON assegnarla MAI in condizioni normali.
+
+─── CAPO GRUPPO / GUIDA ─────────
+- Assegnare SEMPRE la camera 34 (o scala: 33 > 32 > 31 > 30 > 29 > 20)
+- NON assegnare 34 se previsto evento discoteca (scalare a 20 → 21 → 22 → 25 → 28)
+
+─── AUTISTA ─────────────────────
+- Singola basic: 26, 23, 24, 18
+
+─── ANZIANI — PRINCIPIO DISTANZA ─────────────────────
+Assegnare in ordine di età media decrescente, partendo dalle camere più vicine.
+PT: percorso include 3 gradini in discesa dalla hall.
+ATTENZIONE: per mobilità ridotta verificare accessibilità PT.
+
+════════════════════════════════
+INVENTARIO CAMERE
+════════════════════════════════
+
+── PRIMO PIANO ──────────────────
+130 — M+1 — alt: M+1, M, D, S         — [vicinissima ascensore]
+14  — M+1 — alt: M+1, M, D, S         — [molto vicina]
+15  — M+1 — alt: M+1, M, D, S         — [molto vicina] ⚠️ letto fisso matrimoniale non separabile
+16  — T   — alt: T, D, M+1, S         — [molto vicina]
+18  — S   — alt: M, S                  — [vicina]
+20  — M   — alt: M, M+1, D, S         — [vicina] ★ molto bella
+21  — D   — alt: D, M, M+1, S         — [vicina] ★ abbastanza bella
+22  — D   — alt: D, M, M+1, S         — [vicina] ★ abbastanza bella
+23  — S   — solo S                     — [media]
+24  — S   — solo S                     — [media]
+25  — D   — alt: D, M, M+1, S         — [media] ★ abbastanza bella
+26  — S   — solo S                     — [media]
+28  — App — alt: Quad, Quin, T, D, M+1, M, S — [media] ★ abbastanza bella
+29  — M   — alt: M, M+1, D, S         — [lontana] ★ molto bella
+30  — M   — alt: M, M+1, D, S         — [lontana] ★ molto bella
+31  — M   — alt: M, M+1, D, S         — [molto lontana] ★ molto bella
+32  — M   — alt: M, M+1, D, S         — [molto lontana] ★ molto bella
+33  — M   — alt: M, M+1, D, S         — [molto lontana] ★ molto bella
+34  — M   — alt: M, M+1, D, S         — [più lontana] ★ CAPO GRUPPO / molto bella
+
+── PIANO TERRENO ────────────────
+35  — ⚠️ PROPRIETARIO — NON ASSEGNARE — [vicinissima]
+36  — M   — alt: M, S                  — [molto vicina]
+37  — M   — alt: M, D, S               — [molto vicina]
+38  — M   — alt: M, D, S               — [vicina]
+39  — M   — alt: M, S                  — [vicina]
+40  — M   — alt: M, D, S               — [media]
+41  — Quin — alt: Quad, T, D, M+1, M, S — [media]
+42  — M   — alt: M, D, S               — [media]
+43  — M   — alt: M, D, S               — [lontana]
+44  — M   — alt: M, D, S               — [lontana]
+45  — M   — alt: M, D, S               — [molto lontana]
+46  — M   — alt: M, D, S               — [molto lontana]
+47  — M   — alt: D, M, M+1, T, S       — [estrema distanza]
+48  — D   — alt: D, M, M+1, T, S       — [più lontana]
+
+════════════════════════════════
+ORDINE DI ASSEGNAZIONE PER DISTANZA
+════════════════════════════════
+
+MATRIMONIALI (M):
+  PT: 36, 37, 38, 39, 40, 42, 43, 44, 45, 46, 47
+  P1: 20, 21*, 22*, 25*, 29, 30, 31, 32, 33, 34**
+  (*uso M da D/M+1 se necessario  **riservata capo gruppo)
+
+DOPPIE (D):
+  PT: 47, 48
+  P1: 21, 22, 25, 16*, 130*, 14*, 15*, 20*, 29, 30, 31, 32, 33, 34
+
+SINGOLE (S):
+  P1: 130*, 14*, 15*, 16*, 18, 20*, 21*, 22*, 23, 24, 25*, 26
+  PT: nessuna singola standard
+
+TRIPLE (T):
+  P1: 16 (standard)
+  PT: 41* (*alt da Quin)
+
+QUAD / QUIN / APP:
+  PT: 41 (Quin)
+  P1: 28 (App)
+
+════════════════════════════════
+GEOMETRIA DELL'HOTEL — CHIOSTRO
+════════════════════════════════
+
+PRIMO PIANO (3 lati):
+  Lato NORD:  [Asc/Scala] → 130 → 14 → 15 → 16 → 18
+  Lato EST:   [Scala serv] → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 28 (App, angolo)
+  Lato SUD:   29 → 30 → 31 → 32 → 33 → 34
+
+PIANO TERRENO (2 lati):
+  Lato SUD:   35(PROP) → 36 → 37 → 38 → 39 → 40 → 41 (Quin, angolo)
+  Lato EST:   42 → 43 → 44 → 45 → 46 → 47 → 48 → [Pianerottolo]
+
+CORRISPONDENZE VERTICALI:
+  34↔35, 33↔36, 32↔37, 31↔38, 30↔39, 29↔40, 28↔41
+  26↔42, 25↔43, 24↔44, 23↔45, 22↔46, 21↔47, 20↔48
+
+════════════════════════════════
+DISTANZA — ORDINE PER ANZIANI
+════════════════════════════════
+
+PT (dalla più vicina): 36, 37 → 38, 39 → 40, 42 → 43, 44 → 45, 46 → 47, 48
+P1 (dalla più vicina): 130, 14, 15, 16 → 18, 20, 21, 22 → 23, 24, 25, 26, 28 → 29, 30 → 31, 32, 33 → 34
+
+════════════════════════════════
+RUMORE DA EVENTI
+════════════════════════════════
+
+Se evento discoteca/Sala Pop previsto:
+  Alta esposizione:  34, 33, 32, 31 — 35, 36, 37, 38
+  Media esposizione: 30, 39
+  Bassa esposizione: 29, 40
+  → NON assegnare camere ad alta esposizione a ospiti sensibili
+  → NON assegnare 34 al capo gruppo (scalare a 20 → 21 → 22 → 25 → 28)
+
+════════════════════════════════
+OUTPUT RICHIESTO — FORMATO STRUTTURATO
+════════════════════════════════
+
+Rispondi ESCLUSIVAMENTE in JSON con questa struttura esatta:
+
+{
+  "controllo_preliminare": {
+    "camere_richieste": number,
+    "ospiti_totali": number,
+    "anomalie": ["stringa"]
+  },
+  "assegnazioni": [
+    {
+      "camera_hotel": "numero camera",
+      "piano": "P1" o "PT",
+      "tipologia_usata": "stringa",
+      "ospiti": ["Nome Cognome"],
+      "eta_media": number,
+      "note": "stringa"
+    }
+  ],
+  "decisioni": ["stringa"],
+  "compromessi": ["stringa"],
+  "autovalutazione": {
+    "camere_ok": boolean,
+    "ospiti_ok": boolean,
+    "no_duplicati": boolean,
+    "no_camere_vietate": boolean,
+    "cam35_ok": boolean,
+    "capogruppo_ok": boolean,
+    "autisti_ok": boolean,
+    "tipologie_ok": boolean,
+    "capienza_ok": boolean,
+    "no_oversizing": boolean,
+    "qualita_ok": boolean,
+    "pt_esaurito_ok": boolean,
+    "no_soluzioni_creative": boolean,
+    "note_autovalutazione": "stringa"
+  }
+}
+
+Non aggiungere testo fuori dal JSON. Non usare markdown. Solo JSON puro.`;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const TIPO_COLORS = {
+  S:"#475569", M:"#1d4ed8", D:"#6d28d9", T:"#b45309",
+  "M+1":"#0369a1", App:"#9f1239", Quin:"#9f1239", Quad:"#9f1239",
+};
+const AUTOVAL_LABELS = {
+  camere_ok: "Numero camere assegnate = richieste",
+  ospiti_ok: "Numero ospiti assegnati = rooming list",
+  no_duplicati: "Nessuna camera duplicata",
+  no_camere_vietate: "Nessuna camera non disponibile assegnata",
+  cam35_ok: "Camera 35 non assegnata",
+  capogruppo_ok: "Capo gruppo in cam. 34 (o migliore in scala)",
+  autisti_ok: "Autisti in singola basic",
+  tipologie_ok: "Tipologie compatibili con la richiesta",
+  capienza_ok: "Capienza rispettata",
+  no_oversizing: "Nessun oversizing",
+  qualita_ok: "Camere molto belle a VIP/guide prima",
+  pt_esaurito_ok: "Nessuna PT rimasta vuota con ospiti a P1",
+  no_soluzioni_creative: "Nessuna soluzione creativa fuori inventario",
+};
+
+// ─── API KEY SCREEN ────────────────────────────────────────────────────────────
+function ApiKeyScreen({ onSave }) {
+  const [key, setKey] = useState("");
+  const [show, setShow] = useState(false);
+  const [err, setErr] = useState("");
+
+  function save() {
+    const k = key.trim();
+    if (!k.startsWith("sk-ant-")) { setErr("La chiave deve iniziare con sk-ant-"); return; }
+    localStorage.setItem("apogeo_api_key", k);
+    onSave(k);
+  }
+
+  return (
+    <div className="api-screen">
+      <div style={{ maxWidth: 480, width: "100%" }} className="fade-in">
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 6,
+            background: "#c0392b", display: "inline-flex",
+            alignItems: "center", justifyContent: "center",
+            marginBottom: 16,
+            boxShadow: "0 0 32px rgba(192,57,43,0.4)",
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: "50%",
+              background: "#fff", display: "flex",
+              alignItems: "center", justifyContent: "center",
+            }}>
+              <span style={{ fontSize: 26, fontWeight: 900, color: "#000", fontFamily: "Georgia, serif", lineHeight: 1 }}>K</span>
+            </div>
+          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>
+            Hotel Apogeo
+          </h1>
+          <p style={{ fontSize: 13, color: "#64748b", letterSpacing: 1 }}>
+            ASSEGNAZIONE CAMERE · MAYA SRL
+          </p>
+        </div>
+
+        <div className="card" style={{ borderColor: "#1e3a5f" }}>
+          <div className="section-label">Anthropic API Key</div>
+          <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 18, lineHeight: 1.6 }}>
+            Inserisci la tua chiave API Anthropic. Viene salvata solo nel browser locale
+            (localStorage) e non trasmessa a nessun server esterno oltre ad Anthropic.
+          </p>
+          <div style={{ position: "relative", marginBottom: 12 }}>
+            <input
+              type={show ? "text" : "password"}
+              value={key}
+              onChange={e => { setKey(e.target.value); setErr(""); }}
+              onKeyDown={e => e.key === "Enter" && save()}
+              placeholder="sk-ant-api03-..."
+              style={{
+                width: "100%", background: "#0a0f1a", border: "1px solid #1e3a5f",
+                borderRadius: 6, color: "#e2e8f0", padding: "11px 44px 11px 14px",
+                fontSize: 13, fontFamily: "'IBM Plex Mono', monospace",
+              }}
+            />
+            <button
+              onClick={() => setShow(s => !s)}
+              style={{
+                position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", color: "#64748b", fontSize: 16, padding: 0,
+              }}>{show ? "🙈" : "👁"}</button>
+          </div>
+          {err && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 10 }}>⚠ {err}</div>}
+          <button
+            onClick={save}
+            style={{
+              width: "100%", background: "#c0392b", color: "#fff", border: "none",
+              borderRadius: 6, padding: "12px", fontSize: 14, fontWeight: 700,
+              letterSpacing: 0.5,
+            }}>Salva e accedi →</button>
+        </div>
+
+        <p style={{ fontSize: 11, color: "#475569", textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>
+          Ottieni la chiave su{" "}
+          <a href="https://console.anthropic.com/settings/keys" target="_blank"
+            style={{ color: "#60a5fa", textDecoration: "none" }}>
+            console.anthropic.com
+          </a>
+          {" "}· La chiave non lascia il tuo browser
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── BADGE ────────────────────────────────────────────────────────────────────
+function TipoBadge({ t }) {
+  return (
+    <span className="badge" style={{ background: TIPO_COLORS[t] || "#374151" }}>{t}</span>
+  );
+}
+function PianoBadge({ p }) {
+  return (
+    <span className="piano-badge" style={{
+      background: p === "P1" ? "#1e3a5f" : "#14532d",
+      color: p === "P1" ? "#93c5fd" : "#86efac",
+    }}>{p}</span>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("apogeo_api_key") || "");
+  const [rooming, setRooming] = useState("");
+  const [discoteca, setDiscoteca] = useState(false);
+  const [dataArrivo, setDataArrivo] = useState("");
+  const [noteExtra, setNoteExtra] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const outputRef = useRef(null);
+
+  if (!apiKey) return <ApiKeyScreen onSave={setApiKey} />;
+
+  async function elabora() {
+    if (!rooming.trim()) { setError("Inserisci la rooming list."); return; }
+    setError(""); setResult(null); setLoading(true);
+
+    const userMsg = [
+      dataArrivo ? `Data di arrivo: ${dataArrivo}` : "Data di arrivo: non specificata, usa la data odierna per il calcolo età.",
+      discoteca ? "⚠️ EVENTO DISCOTECA/SALA POP PREVISTO." : "Nessun evento discoteca previsto.",
+      noteExtra ? `Note aggiuntive: ${noteExtra}` : "",
+      "",
+      "ROOMING LIST:",
+      rooming.trim(),
+    ].filter(Boolean).join("\n");
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4000,
+          system: SYSTEM_PROMPT,
+          messages: [{ role: "user", content: userMsg }],
+        }),
+      });
+
+      if (!res.ok) {
+        const e = await res.json();
+        if (res.status === 401) {
+          localStorage.removeItem("apogeo_api_key");
+          setApiKey("");
+          return;
+        }
+        throw new Error(e.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      const text = data.content?.map(b => b.text || "").join("") || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      setResult(JSON.parse(clean));
+      setTimeout(() => outputRef.current?.scrollIntoView({ behavior: "smooth" }), 150);
+    } catch (e) {
+      setError("Errore: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function copyTSV() {
+    if (!result) return;
+    const hdr = "Camera\tTipo\tPiano\tOspiti\tEtà media\tNote";
+    const rows = [...result.assegnazioni]
+      .sort((a, b) => {
+        const n = s => s === "130" ? 130 : parseInt(s);
+        return n(a.camera_hotel) - n(b.camera_hotel);
+      })
+      .map(a => `${a.camera_hotel}\t${a.tipologia_usata}\t${a.piano}\t${a.ospiti.join(", ")}\t${a.eta_media}\t${a.note}`);
+    navigator.clipboard.writeText([hdr, ...rows].join("\n"))
+      .then(() => alert("Tabella copiata — incollala direttamente in Excel."));
+  }
+
+  function resetKey() {
+    if (confirm("Rimuovere la chiave API salvata?")) {
+      localStorage.removeItem("apogeo_api_key");
+      setApiKey("");
+    }
+  }
+
+  const sorted = result
+    ? [...result.assegnazioni].sort((a, b) => {
+        const n = s => s === "130" ? 130 : parseInt(s);
+        return n(a.camera_hotel) - n(b.camera_hotel);
+      })
+    : [];
+
+  return (
+    <div style={{ minHeight: "100vh" }}>
+      {/* ── HEADER ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #131c2e 0%, #0a0f1a 100%)",
+        borderBottom: "1px solid #1e3a5f",
+        padding: "18px 28px",
+        position: "sticky", top: 0, zIndex: 100,
+        backdropFilter: "blur(8px)",
+      }}>
+        <div className="header-inner" style={{ maxWidth: 900, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 4,
+              background: "#c0392b", display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              <div style={{
+                width: 29, height: 29, borderRadius: "50%",
+                background: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <span style={{ fontSize: 17, fontWeight: 900, color: "#000", fontFamily: "Georgia, serif", lineHeight: 1 }}>K</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", letterSpacing: 0.3 }}>
+                Assegnazione Camere
+              </div>
+              <div style={{ fontSize: 11, color: "#475569", letterSpacing: 1.2, textTransform: "uppercase" }}>
+                Hotel Apogeo · MAYA srl
+              </div>
+            </div>
+          </div>
+          <button onClick={resetKey} title="Cambia API key"
+            style={{
+              background: "none", border: "1px solid #1e3a5f", borderRadius: 5,
+              color: "#475569", fontSize: 12, padding: "5px 10px",
+            }}>🔑 API key</button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px 60px" }}>
+
+        {/* ── INPUT CARD ── */}
+        <div className="card fade-in">
+          <div className="section-label">Rooming List</div>
+
+          <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, color: "#64748b", display: "block", marginBottom: 5 }}>Data arrivo</label>
+              <input type="date" value={dataArrivo} onChange={e => setDataArrivo(e.target.value)}
+                style={{
+                  width: "100%", background: "#0a0f1a", border: "1px solid #1e3a5f",
+                  borderRadius: 5, color: "#e2e8f0", padding: "9px 12px", fontSize: 13,
+                }}/>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "#64748b", display: "block", marginBottom: 5 }}>Note aggiuntive</label>
+              <input type="text" value={noteExtra}
+                onChange={e => setNoteExtra(e.target.value)}
+                placeholder="es. capo gruppo = Bianchi, VIP cam. 34..."
+                style={{
+                  width: "100%", background: "#0a0f1a", border: "1px solid #1e3a5f",
+                  borderRadius: 5, color: "#e2e8f0", padding: "9px 12px", fontSize: 13,
+                }}/>
+            </div>
+          </div>
+
+          <div
+            onClick={() => setDiscoteca(d => !d)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer",
+              background: discoteca ? "rgba(127,29,29,0.4)" : "transparent",
+              border: `1px solid ${discoteca ? "#dc2626" : "#1e3a5f"}`,
+              borderRadius: 6, padding: "8px 14px", marginBottom: 14,
+              userSelect: "none", transition: "all 0.2s",
+            }}>
+            <span style={{ fontSize: 14 }}>{discoteca ? "🔴" : "⚫"}</span>
+            <span style={{ fontSize: 13, color: discoteca ? "#fca5a5" : "#64748b", fontWeight: discoteca ? 600 : 400 }}>
+              Evento discoteca / Sala Pop previsto
+            </span>
+          </div>
+
+          <textarea
+            value={rooming}
+            onChange={e => setRooming(e.target.value)}
+            placeholder={"Incolla la rooming list in qualsiasi formato:\n\n101  Marco Bianchi  Doppia matrimoniale  14/03/1978\n102  Laura Rossi  Singola  22/11/1989\n103  Paolo Conti / Elisa Neri  Twin  05/07/1965 / 18/01/1970\n...\n\nAccetta: testo libero, tabelle Word/Excel, CSV, elenchi"}
+            rows={11}
+            style={{
+              width: "100%", background: "#0a0f1a", border: "1px solid #1e3a5f",
+              borderRadius: 5, color: "#e2e8f0", padding: "12px 14px", fontSize: 13,
+              fontFamily: "'IBM Plex Mono', monospace", resize: "vertical", lineHeight: 1.65,
+            }}
+          />
+
+          <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={elabora} disabled={loading}
+              style={{
+                background: loading ? "#374151" : "#c0392b", color: "#fff",
+                border: "none", borderRadius: 6, padding: "11px 26px",
+                fontSize: 14, fontWeight: 700, letterSpacing: 0.4,
+                opacity: loading ? 0.8 : 1,
+              }}>
+              {loading ? <><span className="spinner"/>Elaborazione...</> : "▶  Elabora"}
+            </button>
+            {result && (
+              <button onClick={() => { setResult(null); setRooming(""); setError(""); }}
+                style={{
+                  background: "transparent", border: "1px solid #334155",
+                  color: "#64748b", borderRadius: 6, padding: "11px 18px", fontSize: 13,
+                }}>✕ Nuova</button>
+            )}
+          </div>
+
+          {error && (
+            <div style={{
+              marginTop: 14, background: "#450a0a", border: "1px solid #dc2626",
+              borderRadius: 5, padding: 13, fontSize: 13, color: "#fca5a5",
+              fontFamily: "'IBM Plex Mono', monospace", whiteSpace: "pre-wrap",
+            }}>{error}</div>
+          )}
+        </div>
+
+        {/* ── OUTPUT ── */}
+        {result && (
+          <div ref={outputRef} className="fade-in">
+
+            {/* Controllo preliminare */}
+            <div className="card">
+              <div className="section-label">Controllo Preliminare</div>
+              <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 12 }}>
+                <div style={{ fontSize: 13 }}>
+                  <span style={{ color: "#64748b" }}>Camere richieste: </span>
+                  <strong style={{ color: "#60a5fa", fontFamily: "monospace" }}>
+                    {result.controllo_preliminare?.camere_richieste}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 13 }}>
+                  <span style={{ color: "#64748b" }}>Ospiti totali: </span>
+                  <strong style={{ color: "#60a5fa", fontFamily: "monospace" }}>
+                    {result.controllo_preliminare?.ospiti_totali}
+                  </strong>
+                </div>
+              </div>
+              {result.controllo_preliminare?.anomalie?.length > 0 && (
+                <div style={{ background: "#451a03", border: "1px solid #d97706", borderRadius: 5, padding: 12 }}>
+                  {result.controllo_preliminare.anomalie.map((a, i) => (
+                    <div key={i} style={{ fontSize: 13, color: "#fde68a", padding: "2px 0" }}>⚠ {a}</div>
+                  ))}
+                </div>
+              )}
+              {(!result.controllo_preliminare?.anomalie || result.controllo_preliminare.anomalie.length === 0) && (
+                <div style={{ fontSize: 13, color: "#4ade80" }}>✅ Nessuna anomalia rilevata</div>
+              )}
+            </div>
+
+            {/* Tabella assegnazioni */}
+            <div className="card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div className="section-label" style={{ margin: 0 }}>Assegnazioni ({sorted.length} camere)</div>
+                <button onClick={copyTSV} style={{
+                  background: "#0a0f1a", border: "1px solid #1e3a5f", borderRadius: 5,
+                  color: "#94a3b8", fontSize: 12, padding: "5px 12px",
+                }}>📋 Copia per Excel</button>
+              </div>
+              <div style={{ overflowX: "auto", borderRadius: 5, border: "1px solid #1e3a5f" }}>
+                <table>
+                  <thead>
+                    <tr style={{ background: "#0a0f1a" }}>
+                      {["Cam.", "Tipo", "Piano", "Ospiti", "Età", "Note"].map(h => (
+                        <th key={h} style={{
+                          padding: "10px 12px", fontSize: 10, fontWeight: 700,
+                          letterSpacing: 1.2, textTransform: "uppercase", color: "#475569",
+                          textAlign: "left", whiteSpace: "nowrap", borderBottom: "1px solid #1e3a5f",
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map((a, i) => (
+                      <tr key={i} style={{ borderBottom: "1px solid #131c2e" }}>
+                        <td style={{ padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 17, fontWeight: 800,
+                          color: a.piano === "P1" ? "#60a5fa" : "#4ade80", whiteSpace: "nowrap" }}>
+                          {a.camera_hotel}
+                        </td>
+                        <td style={{ padding: "10px 12px" }}><TipoBadge t={a.tipologia_usata} /></td>
+                        <td style={{ padding: "10px 12px" }}><PianoBadge p={a.piano} /></td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#cbd5e1" }}>
+                          {a.ospiti.join(" · ")}
+                        </td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#94a3b8", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                          {a.eta_media}
+                        </td>
+                        <td style={{ padding: "10px 12px", fontSize: 12, color: "#64748b", maxWidth: 200 }}>
+                          {a.note}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Decisioni + Compromessi */}
+            <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 0 }}>
+              <div className="card" style={{ marginBottom: 0 }}>
+                <div className="section-label">Decisioni chiave</div>
+                {result.decisioni?.map((d, i) => (
+                  <div key={i} style={{
+                    fontSize: 13, color: "#cbd5e1", padding: "7px 0",
+                    borderBottom: "1px solid #1e293b30", display: "flex", gap: 10,
+                  }}>
+                    <span style={{ color: "#60a5fa", fontWeight: 700, fontFamily: "monospace", minWidth: 22, fontSize: 12 }}>
+                      {String(i+1).padStart(2,"0")}
+                    </span>
+                    {d}
+                  </div>
+                ))}
+              </div>
+              <div className="card" style={{ marginBottom: 0 }}>
+                <div className="section-label">Compromessi</div>
+                {result.compromessi?.length > 0
+                  ? result.compromessi.map((c, i) => (
+                    <div key={i} style={{
+                      fontSize: 13, color: "#fde68a", padding: "7px 0",
+                      borderBottom: "1px solid #1e293b30", display: "flex", gap: 10,
+                    }}>
+                      <span style={{ color: "#f59e0b", minWidth: 16 }}>⚠</span>{c}
+                    </div>
+                  ))
+                  : <div style={{ fontSize: 13, color: "#4ade80" }}>✅ Nessun compromesso rilevante</div>
+                }
+              </div>
+            </div>
+
+            {/* Autovalutazione */}
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="section-label">Autovalutazione</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 2 }}>
+                {Object.entries(AUTOVAL_LABELS).map(([k, label]) => {
+                  const ok = result.autovalutazione?.[k];
+                  return (
+                    <div key={k} style={{
+                      display: "flex", gap: 8, alignItems: "flex-start",
+                      padding: "5px 0", borderBottom: "1px solid #0a0f1a20",
+                    }}>
+                      <span style={{ fontSize: 14, minWidth: 18 }}>{ok ? "✅" : "❌"}</span>
+                      <span style={{ fontSize: 12, color: ok ? "#94a3b8" : "#f87171" }}>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {result.autovalutazione?.note_autovalutazione && (
+                <div style={{ marginTop: 12, fontSize: 12, color: "#64748b", fontStyle: "italic", borderTop: "1px solid #1e3a5f", paddingTop: 10 }}>
+                  {result.autovalutazione.note_autovalutazione}
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
